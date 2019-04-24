@@ -75,7 +75,8 @@ void *RecvMessages(void *arg) {
     }
 }
 
-int main() {
+int main(int argc, char **argv) {
+    MPI_Init(&argc, &argv);
     for (int &road_capacity : roads_capacity) {
         road_capacity = 200 + rand() % 500;
     }
