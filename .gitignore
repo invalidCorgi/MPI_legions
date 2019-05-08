@@ -92,3 +92,7 @@ modules.xml
 
 # ignore output file
 main
+
+# and vscode files
+.vscode
+

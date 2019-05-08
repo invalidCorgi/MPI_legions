@@ -21,6 +21,8 @@ int roads_capacity[T];
 std::vector<unsigned int> legions_id_wanted_same_road;
 int permissions_to_go;
 pthread_mutex_t lock;
+pthread_mutex_t releaseLock;
+pthread_mutex_t clockLock;
 int msg_recv[MSG_MAX_SIZE];
 int msg_send[MSG_MAX_SIZE];
 MPI_Status status;
@@ -33,23 +35,32 @@ bool can_i_enter_critical_section(){
 void *RecvMessages(void *arg) {
     while (1) {
         MPI_Recv(msg_recv, MSG_MAX_SIZE, MPI_INT, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, &status);
+        pthread_mutex_lock(&clockLock);
         int sender_clock = msg_recv[0];
         msg_recv[0] = my_clock;
         int sender_id = status.MPI_SOURCE;
         my_clock = std::max(my_clock, sender_clock) + 1;
+        pthread_mutex_unlock(&clockLock);
         switch (status.MPI_TAG) {
             case MSG_WANT: {
                 int road_id = msg_recv[1];
+                pthread_mutex_lock(&releaseLock);
                 if(want_road_id == road_id) {
+                    pthread_mutex_lock(&clockLock);
                     if ((want_road_clock < sender_clock) || (want_road_clock == sender_clock && rank < sender_id)) {
                         legions_id_wanted_same_road.push_back(sender_id);
                         msg_recv[1] = legion_size;
                         MPI_Send(msg_recv, MSG_PERMISSION_SIZE, MPI_INT, sender_id, MSG_PERMISSION, MPI_COMM_WORLD);
+                    }else{
+                        msg_recv[1] = 0;
+                        MPI_Send(msg_recv, MSG_PERMISSION_SIZE, MPI_INT, sender_id, MSG_PERMISSION, MPI_COMM_WORLD);
                     }
+                    pthread_mutex_unlock(&clockLock);
                 } else{
                     msg_recv[1] = 0;
                     MPI_Send(msg_recv, MSG_PERMISSION_SIZE, MPI_INT, sender_id, MSG_PERMISSION, MPI_COMM_WORLD);
                 }
+                pthread_mutex_unlock(&releaseLock);
                 break;
             }
             case MSG_RELEASE: {
@@ -82,7 +93,7 @@ int main(int argc, char **argv) {
     errno = pthread_create(&thread_id, NULL, RecvMessages, NULL);
 
     for (int &road_capacity : roads_capacity) {
-        road_capacity = 200 + rand() % 50;
+        road_capacity = 300 + rand() % 50;
         printf("Droga ma rozmiar %d.\n", road_capacity);
     }
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
@@ -98,12 +109,13 @@ int main(int argc, char **argv) {
         want_road_id = rand()%T;
         printf("%d: Otrzymalem rozkaz przemieszczenia traktem %d\n", rank, want_road_id);
         //printf("%d: Pytam sie innych czy moge wejsc na trakt\n", rank);
+        pthread_mutex_lock(&clockLock);
         my_clock++;
         want_road_clock = my_clock;
-        permissions_to_go = L - 1;
         msg_send[0] = want_road_clock;
+        pthread_mutex_unlock(&clockLock);
+        permissions_to_go = L - 1;
         msg_send[1] = want_road_id;
-        want_road_clock = msg_send[0];
         //MPI_Bcast(msg_send, MSG_WANT_SIZE, MPI_INT, rank, MPI_COMM_WORLD);
         pthread_mutex_lock(&lock);
         for(int i = 0; i < L; i++){
@@ -118,15 +130,19 @@ int main(int argc, char **argv) {
         sleep(sleepTime);
         pthread_mutex_unlock(&lock);
         printf("%d: Wychodze z %d traktu i informuje o tym zainteresowanych\n", rank, want_road_id);
+        pthread_mutex_lock(&clockLock);
         msg_send[0] = my_clock;
+        pthread_mutex_unlock(&clockLock);
         msg_send[1] = want_road_id;
         msg_send[2] = legion_size;
         want_road_id = -1;
         people_already_in_want_road = 0;
+        pthread_mutex_lock(&releaseLock);
         while (legions_id_wanted_same_road.size() > 0){
             MPI_Send(msg_send, MSG_RELEASE_SIZE, MPI_INT, legions_id_wanted_same_road.back(), MSG_RELEASE, MPI_COMM_WORLD);
             legions_id_wanted_same_road.pop_back();
         }
+        pthread_mutex_unlock(&releaseLock);
     }
     errno = pthread_join(thread_id, NULL);
     return 0;
