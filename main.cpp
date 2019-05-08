@@ -99,7 +99,7 @@ int main(int argc, char **argv) {
     }
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     srand(static_cast<unsigned int>(rank * 100));
-    legion_size = 100 + rand() % 100;
+    legion_size = 200 + rand() % 100;
     printf("Legion %d ma rozmiar %d.\n",rank ,legion_size);
     MPI_Comm_size(MPI_COMM_WORLD, &L);
     pthread_mutex_unlock(&lock);
