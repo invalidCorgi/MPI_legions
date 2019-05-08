@@ -1,4 +1,4 @@
-#define T 1
+#define T 2
 #define MSG_WANT 1
 #define MSG_WANT_SIZE 2
 #define MSG_RELEASE 2
@@ -92,9 +92,10 @@ int main(int argc, char **argv) {
     pthread_t thread_id;
     errno = pthread_create(&thread_id, NULL, RecvMessages, NULL);
 
-    for (int &road_capacity : roads_capacity) {
-        road_capacity = 300 + rand() % 50;
-        printf("Droga ma rozmiar %d.\n", road_capacity);
+    //for (int &road_capacity : roads_capacity) {
+    for(int i = 0; i < T; i++){
+        roads_capacity[i] = 300 + ((i + 13) * T * 5) % 100;
+        printf("Droga ma rozmiar %d.\n", roads_capacity[i]);
     }
     MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     srand(static_cast<unsigned int>(rank * 100));
@@ -116,7 +117,6 @@ int main(int argc, char **argv) {
         pthread_mutex_unlock(&clockLock);
         permissions_to_go = L - 1;
         msg_send[1] = want_road_id;
-        //MPI_Bcast(msg_send, MSG_WANT_SIZE, MPI_INT, rank, MPI_COMM_WORLD);
         pthread_mutex_lock(&lock);
         for(int i = 0; i < L; i++){
             if(i != rank){
